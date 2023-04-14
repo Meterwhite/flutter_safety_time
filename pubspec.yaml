@@ -1,0 +1,17 @@
+name: flutter_safety_time
+description: A timelock.Block mutiple taps.Block another call within the interval.
+version: 1.0.0
+homepage: https://github.com/Meterwhite/flutter_safety_time
+documentation: https://github.com/Meterwhite/flutter_safety_time
+
+environment:
+  sdk: ">=2.12.0 <3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
