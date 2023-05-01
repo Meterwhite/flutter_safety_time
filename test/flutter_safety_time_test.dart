@@ -1,7 +1,6 @@
-import 'dart:async';
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_safety_time/flutter_safety_time.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'dart:async';
 
 void main() {
   test('avaliable', () async {
@@ -39,74 +38,21 @@ void main() {
       throw Exception();
     }
   });
-}
 
-/// How to use: Specifically, you can replace [State] with [SafetyTimeState],
-/// [SafetyTimeState] is a simple widget that automatically manages state, users can use [SafetyTime] in `nested` way.
-/// [SafetyTimeState] will work until [dispose] is called.
-///
-/// Widget build(BuildContext context) {
-///   ... ...
-///   oneTap : {
-///     if([isAvailable]) {
-///       loginRequest();
-///     }
-///   }
-///   ... ...
-/// }
-abstract class SafetyTimeState<T extends StatefulWidget> extends State<T> {
-  Duration? interval;
-
-  bool get isAvailable {
-    return false == SafetyTime.unavailableOf(key: this, interval: interval);
-  }
-
-  bool get isUnavailable => !isAvailable;
-
-  @override
-  void initState() {
-    super.initState();
-    SafetyTime.unavailableOf(key: this, interval: interval);
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-    SafetyTime.disposeKey(this);
-  }
-}
-
-/**
- * 
- * 
- Use [SafetyTimeState] insted of [State].
-[SafetyTimeState] is a simple widget that automatically manages state, users can use [SafetyTime] in `nested` way.
-[SafetyTimeState] will work until [dispose] is called.
-```dart
-class Page extends StatefulWidget {
-  @override
-  SafetyTimeState<Page> createState() => _PageState();
-}
-
-class _PageState extends SafetyTimeState<Page> { // ⬅ 👀
-  @override
-  void initState() {
-    super.initState();
-    // interval = const Duration(milliseconds: 800); // ⬅ 👀
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(onTap: () {
-      if (isUnavailable) { // ⬅ 👀
-        return;
+  test('generic', () {
+    Object? exception;
+    try {
+      if (SafetyTime.availableOf<String>(key: 'String')) {
+        if (SafetyTime.availableOf<int>(key: 'int')) {
+          if (SafetyTime.availableOf<String>(key: 'String')) {
+            Exception();
+          }
+        }
       }
-      doSomething();
-    });
-  }
+      SafetyTime.availableOf<int>(key: 'String'); // throw
+    } catch (e) {
+      exception = e;
+    }
+    expect(exception, const TypeMatcher<TypeError>());
+  });
 }
-
-```
- * 
- * 
- */

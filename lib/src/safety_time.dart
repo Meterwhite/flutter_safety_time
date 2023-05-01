@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 
-typedef SafetyTimeStateCallback = void Function(
+typedef SafetyTimeStateCallback<T> = void Function(
   bool unavailable,
-  SafetyTimeState state,
+  SafetyTimeState<T> state,
 );
 
 /// [SafetyTime] is a timelock which designed to block method invocations multiple times within an interval.
@@ -64,19 +64,19 @@ class SafetyTime {
   ///
   /// Returning a new value in [callback] can reset [SafetyTimeState.userInfo],
   /// also see [SafetyTimeState.userInfo].
-  static bool unavailableOf({
+  static bool unavailableOf<T>({
     required dynamic key,
     Duration? interval,
     bool update = true,
-    SafetyTimeStateCallback? callback,
+    SafetyTimeStateCallback<T>? callback,
   }) {
     key ??= _globalKey;
     interval ??= SafetyTime.defaultInterval;
     final stateMap = SafetyTime()._stateMap;
     final now = DateTime.now();
-    SafetyTimeState? state = stateMap[key];
+    var state = stateMap[key] as SafetyTimeState<T>?;
     if (state == null) {
-      state = SafetyTimeState(date: now);
+      state = SafetyTimeState<T>(date: now);
       stateMap[key] = state;
       return false;
     } else if (state._hasNoTime) {
@@ -94,11 +94,11 @@ class SafetyTime {
   }
 
   /// See [callback]
-  static bool availableOf({
+  static bool availableOf<T>({
     required dynamic key,
     Duration? interval,
     bool update = true,
-    SafetyTimeStateCallback? callback,
+    SafetyTimeStateCallback<T>? callback,
   }) {
     return !unavailableOf(
       key: key,
@@ -113,8 +113,17 @@ class SafetyTime {
   ///
   /// Request? updateUserInfo = SafetyTime.get(new UpdateUserInfo(), Duration(seconds: 1));
   ///
-  static T? get<T>(T value, {T? or, Duration? interval, dynamic key}) {
-    return SafetyTime.availableOf(key: key, interval: interval) ? value : or;
+  static T? get<T>(
+    T value, {
+    T? or,
+    Duration? interval,
+    dynamic key,
+    SafetyTimeStateCallback<T>? callback,
+  }) {
+    return SafetyTime.availableOf(
+            key: key, interval: interval, callback: callback)
+        ? value
+        : or;
   }
 
   /// [SafetyTime.tryLockForever] can lock [key] for a long time.
@@ -138,11 +147,12 @@ class SafetyTime {
   /// [timeout] allows you to remove the current [tryLockForever] after some time
   ///
   /// also see: [SafetyTime.unlockForever]
-  static bool tryLockForever(
+  static bool tryLockForever<T>(
     dynamic key, {
     Duration? timeout,
+    SafetyTimeStateCallback<T>? callback,
   }) {
-    var state = SafetyTime()._stateMap[key];
+    var state = SafetyTime()._stateMap[key] as SafetyTimeState<T>?;
     if (state == null) {
       state = SafetyTimeState(date: DateTime.now());
       SafetyTime()._stateMap[key] = state;
@@ -154,8 +164,10 @@ class SafetyTime {
         });
       }
       state._hasNoTime = true;
+      callback?.call(true, state);
       return true;
     }
+    callback?.call(false, state);
     return false;
   }
 
@@ -192,10 +204,13 @@ class SafetyTime {
   ///   ... ...
   /// }
   ///
-  static Future<T> synchronizedKey<T>(
-      dynamic key, FutureOr<T> Function(dynamic userInfo) computation,
-      {dynamic userInfo, Duration? timeout}) async {
-    var state = SafetyTime()._stateMap[key];
+  static Future<R> synchronizedKey<T, R>(
+    dynamic key,
+    FutureOr<R> Function(SafetyTimeState<T> state) computation, {
+    T? userInfo,
+    Duration? timeout,
+  }) async {
+    var state = SafetyTime()._stateMap[key] as SafetyTimeState<T>?;
     if (state == null) {
       state = SafetyTimeState(date: DateTime.now());
       SafetyTime()._stateMap[key] = state;
@@ -220,12 +235,8 @@ class SafetyTime {
           await oldLocked;
         }
       }
-      var value = computation(state.userInfo);
-      if (value is Future) {
-        return await value;
-      } else {
-        return value;
-      }
+      final value = computation(state);
+      return value is Future ? (await value) : value;
     } finally {
       void complete() {
         if (identical(getCurrentLocked(), completer.future)) {
@@ -271,10 +282,10 @@ class SafetyTime {
   static const String _globalKey = 'SafetyTimeGlobalKey';
 }
 
-class SafetyTimeState {
+class SafetyTimeState<T> {
   SafetyTimeState({required DateTime date, this.userInfo}) : _date = date;
 
-  dynamic userInfo;
+  T? userInfo;
 
   DateTime _date;
 

@@ -18,7 +18,7 @@ onBTap: {
 Limit onece login in 1 minute.
 ```dart
 loginRequest() async {
-    if(SafetyTime.unavailableOf('Login', Duration(seconds: 1))) {
+    if(SafetyTime.unavailableOf('Login', Duration(minutes: 1))) {
         alert('Limit onece login in 1 minute.');
         return;
     }
@@ -56,7 +56,7 @@ Only one asynchronous block can run while the key is retained.
 If [timeout] is specified, it will try to grab the lock and will not call the computation callback and throw a [TimeoutExpection] is the lock cannot be grabbed in the given duration.
 ```dart
 
-save(x) {
+save(x) {i
   await SafetyTime.synchronizedKey('WritToFile', (userInfo) async {
     writToFile(x);
   });
