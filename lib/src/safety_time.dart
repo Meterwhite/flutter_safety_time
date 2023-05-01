@@ -1,12 +1,13 @@
+import 'package:flutter/material.dart';
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+typedef SafetyTimeStateCallback = void Function(
+  bool unavailable,
+  SafetyTimeState state,
+);
 
-typedef SafetyTimeStateCallback = void Function(SafetyTimeState state);
-
-/// [SafetyTime] is a time lock which designed to block method invocations multiple times within an interval.
-/// It works like a synchronized mutex ([lock]and[unlock]).
-/// [SafetyTime] is suitable for flutter. It avoids `Nested` and `state management`.
+/// [SafetyTime] is a timelock which designed to block method invocations multiple times within an interval.
+/// It works like a synchronized mutex ([lock] and [unlock]).
 ///
 /// onTap: {
 ///   if([SafetyTime.unavailable]) return;
@@ -59,27 +60,26 @@ class SafetyTime {
   /// Passing `false` means only get the current state, not as a business event.
   ///
   /// [SafetyTimeState.userInfo] is an object that can be shared at different pages,
-  /// You can get and set it in [onAvailable] and [onUnavailable].
+  /// You can get and set it in [callback].
   ///
-  /// Returning a new value in [onAvailable] can reset [SafetyTimeState.userInfo],
-  /// also see [onUnavailable], [SafetyTimeState.userInfo].
-  static bool unavailableOf<T>({
+  /// Returning a new value in [callback] can reset [SafetyTimeState.userInfo],
+  /// also see [SafetyTimeState.userInfo].
+  static bool unavailableOf({
     required dynamic key,
     Duration? interval,
     bool update = true,
-    SafetyTimeStateCallback? onAvailable,
-    SafetyTimeStateCallback? onUnavailable,
+    SafetyTimeStateCallback? callback,
   }) {
     key ??= _globalKey;
     interval ??= SafetyTime.defaultInterval;
     final stateMap = SafetyTime()._stateMap;
-    var now = DateTime.now();
+    final now = DateTime.now();
     SafetyTimeState? state = stateMap[key];
     if (state == null) {
       state = SafetyTimeState(date: now);
       stateMap[key] = state;
       return false;
-    } else if (state._lock) {
+    } else if (state._hasNoTime) {
       return true;
     }
     final prev = state._date;
@@ -87,28 +87,25 @@ class SafetyTime {
       state._date = now;
     }
     final isUnavailable = now.difference(prev) < interval;
-    if (!isUnavailable && null != onAvailable) {
-      onAvailable.call(state);
-    } else if (isUnavailable && null != onUnavailable) {
-      onUnavailable.call(state);
+    if (null != callback) {
+      callback(isUnavailable, state);
     }
     return isUnavailable;
   }
 
-  /// See [onAvailable]
+  /// See [callback]
   static bool availableOf({
     required dynamic key,
     Duration? interval,
     bool update = true,
-    SafetyTimeStateCallback? onAvailable,
-    SafetyTimeStateCallback? onUnavailable,
+    SafetyTimeStateCallback? callback,
   }) {
     return !unavailableOf(
-        key: key,
-        interval: interval,
-        update: update,
-        onAvailable: onAvailable,
-        onUnavailable: onUnavailable);
+      key: key,
+      interval: interval,
+      update: update,
+      callback: callback,
+    );
   }
 
   /// [SafetyTime.get] makes the code easy to read,
@@ -141,19 +138,22 @@ class SafetyTime {
   /// [timeout] allows you to remove the current [tryLockForever] after some time
   ///
   /// also see: [SafetyTime.unlockForever]
-  static bool tryLockForever(dynamic key, {Duration? timeout}) {
+  static bool tryLockForever(
+    dynamic key, {
+    Duration? timeout,
+  }) {
     var state = SafetyTime()._stateMap[key];
     if (state == null) {
       state = SafetyTimeState(date: DateTime.now());
       SafetyTime()._stateMap[key] = state;
     }
-    if (!state._lock) {
+    if (!state._hasNoTime) {
       if (null != timeout) {
         Future.delayed(timeout).then((value) {
           unlockForever(key);
         });
       }
-      state._lock = true;
+      state._hasNoTime = true;
       return true;
     }
     return false;
@@ -161,19 +161,19 @@ class SafetyTime {
 
   /// See: [SafetyTime.tryLockForever]
   static void unlockForever(dynamic key) =>
-      SafetyTime()._stateMap[key]?._lock = false;
+      SafetyTime()._stateMap[key]?._hasNoTime = false;
 
   /// Thanks `synchronized`
   ///
   /// Synchronous [key](non-reentrant)
   /// Executes [computation] when lock is available.
-  /// 
+  ///
   /// Only one asynchronous block can run while the key is retained.
-  /// 
+  ///
   /// If [timeout] is specified, it will try to grab the lock and will not
   /// call the computation callback and throw a [TimeoutExpection] is the lock
   /// cannot be grabbed in the given duration.
-  /// 
+  ///
   /// save(x) {
   ///   await SafetyTime.synchronizedKey('WritToFile', (userInfo) async {
   ///     writToFile(x);
@@ -201,42 +201,42 @@ class SafetyTime {
       SafetyTime()._stateMap[key] = state;
     }
     state.userInfo = userInfo;
-    getCurrentLocker() {
-      return state?._locker;
+    getCurrentLocked() {
+      return state?._locked;
     }
 
-    setCurrentLocker(Future<dynamic>? locker) {
-      state?._locker = locker;
+    setCurrentLocked(Future<dynamic>? locked) {
+      state?._locked = locked;
     }
 
-    final oldLocker = getCurrentLocker();
+    final oldLocked = getCurrentLocked();
     final completer = Completer.sync();
-    setCurrentLocker(completer.future);
+    setCurrentLocked(completer.future);
     try {
-      if (oldLocker != null) {
+      if (oldLocked != null) {
         if (timeout != null) {
-          await oldLocker.timeout(timeout);
+          await oldLocked.timeout(timeout);
         } else {
-          await oldLocker;
+          await oldLocked;
         }
       }
-      var x = computation(state.userInfo);
-      if (x is Future) {
-        return await x;
+      var value = computation(state.userInfo);
+      if (value is Future) {
+        return await value;
       } else {
-        return x;
+        return value;
       }
     } finally {
       void complete() {
-        if (identical(getCurrentLocker(), completer.future)) {
-          setCurrentLocker(null);
+        if (identical(getCurrentLocked(), completer.future)) {
+          setCurrentLocked(null);
         }
         completer.complete();
       }
 
-      if (oldLocker != null && timeout != null) {
+      if (oldLocked != null && timeout != null) {
         // ignore: unawaited_futures
-        oldLocker.then((_) {
+        oldLocked.then((_) {
           complete();
         });
       } else {
@@ -250,7 +250,7 @@ class SafetyTime {
     SafetyTimeState? state = SafetyTime()._stateMap[key];
     if (state == null) return;
     state.userInfo = null;
-    state._locker = null;
+    state._locked = null;
     SafetyTime()._stateMap.remove(key);
   }
 
@@ -268,21 +268,17 @@ class SafetyTime {
   final Map<dynamic, SafetyTimeState> _stateMap = {};
 
   /// [key] for global interaction.
-  static const String _globalKey = '';
-
-  /// [Duration(days: 30000)] is a fairly long time.
-  static const Duration forever = Duration(days: 30000);
+  static const String _globalKey = 'SafetyTimeGlobalKey';
 }
-
 
 class SafetyTimeState {
   SafetyTimeState({required DateTime date, this.userInfo}) : _date = date;
-  
+
   dynamic userInfo;
 
   DateTime _date;
 
-  Future<dynamic>? _locker;
+  Future<dynamic>? _locked;
 
-  bool _lock = false;
+  bool _hasNoTime = false;
 }
