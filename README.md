@@ -14,7 +14,7 @@ and the Flutter guide for
 
 
 ## Features
-- [SafetyTime] is a timelock which designed to block multiple calls within an interval. It works like a synchronized mutex ([lock] and [unlock]).
+- [SafetyTime] is a timelock which designed to block multiple calls within an interval. 
 
 - [SafetyTime] provides two cor functions:
     - The first is to block users from repeated clicks, repeated network requests, etc.For example, in a multi-select list, the user touches multiple options at the same time.As another example, when the network requests, the user clicks again to request.
